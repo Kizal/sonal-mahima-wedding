@@ -542,27 +542,32 @@
     opacity: 0.5;
   }
 
-  /* Floating petal animation */
+  /* Floating petal animation — lightweight 2D only */
   @keyframes petalFall {
-    0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
-    10% { opacity: 0.4; }
-    100% { transform: translateY(100vh) rotate3d(1, 1, 0, 360deg); opacity: 0; }
+    0%   { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+    10%  { opacity: var(--o, 0.35); }
+    90%  { opacity: var(--o, 0.35); }
+    100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
   }
   .petal {
     position: fixed;
     top: -40px;
-    width: 14px;
-    height: 14px;
-    opacity: 0.4;
+    width: var(--sz, 14px);
+    height: var(--sz, 14px);
     pointer-events: none;
     z-index: 100;
     animation: petalFall linear infinite;
+    will-change: transform;
+    contain: strict;
   }
   .petal svg {
     width: 100%;
     height: 100%;
     fill: var(--gold);
-    filter: drop-shadow(0 2px 4px rgba(184, 134, 11, 0.3));
+  }
+  /* Respect user motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    .petal { display: none; }
   }
 
   /* Toast */
@@ -978,26 +983,41 @@
     });
   }, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
 
-  // ============ FALLING PETALS (3D ambient) ============
-  const petalSvg = `<svg viewBox="0 0 512 512"><path d="M495 186.2c-56.1-99.2-167.9-106.8-197.8-107.5C215.1 78.4 83 150 16.5 301.6c-18.6 42.4-23.7 90.7-9.4 135 11 34.3 32.3 64.6 61.8 86.8 54.4 40.9 129.5 40.1 190.5-2.2 46.1-31.9 83.2-76 109.8-128.5C417.8 296 525.7 240.2 495 186.2z"/></svg>`;
+  // ============ FALLING PETALS (lightweight) ============
+  // Build a reusable template once — no innerHTML parsing per petal
+  const _petalTpl = document.createElement('div');
+  _petalTpl.className = 'petal';
+  const _svgNS = 'http://www.w3.org/2000/svg';
+  const _svg = document.createElementNS(_svgNS, 'svg');
+  _svg.setAttribute('viewBox', '0 0 512 512');
+  const _path = document.createElementNS(_svgNS, 'path');
+  _path.setAttribute('d', 'M495 186.2c-56.1-99.2-167.9-106.8-197.8-107.5C215.1 78.4 83 150 16.5 301.6c-18.6 42.4-23.7 90.7-9.4 135 11 34.3 32.3 64.6 61.8 86.8 54.4 40.9 129.5 40.1 190.5-2.2 46.1-31.9 83.2-76 109.8-128.5C417.8 296 525.7 240.2 495 186.2z');
+  _svg.appendChild(_path);
+  _petalTpl.appendChild(_svg);
+
+  const MAX_PETALS = 6;          // cap live petals to avoid DOM buildup
+  const SPAWN_MS   = 3000;       // slower spawn rate
+  let _livePetals  = 0;
+  const _prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function createPetal() {
-    const p = document.createElement('div');
-    p.className = 'petal';
+    if (_prefersReducedMotion || _livePetals >= MAX_PETALS) return;
+    const p = _petalTpl.cloneNode(true);  // deep clone — no HTML parsing
+    const dur = 12 + Math.random() * 6;   // 12-18 s
+    const sz  = 10 + Math.random() * 8;   // 10-18 px
     p.style.left = Math.random() * 100 + '%';
-    p.style.animationDuration = (10 + Math.random() * 8) + 's';
-    p.style.animationDelay = Math.random() * 2 + 's';
-    const scale = 0.5 + Math.random() * 0.7;
-    p.style.transform = `scale(${scale})`;
-    p.style.opacity = (0.3 + Math.random() * 0.4).toString();
-    p.innerHTML = petalSvg;
+    p.style.animationDuration = dur + 's';
+    p.style.setProperty('--o', (0.25 + Math.random() * 0.3).toFixed(2));
+    p.style.setProperty('--sz', sz.toFixed(0) + 'px');
     document.body.appendChild(p);
-    setTimeout(() => p.remove(), 19000);
+    _livePetals++;
+    // Remove after one full cycle
+    setTimeout(() => { p.remove(); _livePetals--; }, dur * 1000);
   }
 
-  // Spawn petals slowly
-  setInterval(createPetal, 2000);
-  for (let i = 0; i < 4; i++) setTimeout(createPetal, i * 800);
+  // Stagger initial batch, then steady interval
+  for (let i = 0; i < 3; i++) setTimeout(createPetal, i * 1200);
+  setInterval(createPetal, SPAWN_MS);
 
 </script>
 
